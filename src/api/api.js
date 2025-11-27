@@ -1,23 +1,28 @@
 import axios from "axios";
+import useTelegram from "../hooks/useTelegram";
 
-const API_BASE = "https://futurefund-api-production.up.railway.app";
-
-const tg = window.Telegram?.WebApp;
-const initData = tg?.initData || "";
-
-const api = axios.create({
-  baseURL: API_BASE,
-  headers: {
-    "Content-Type": "application/json",
-  },
+const API = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL,
 });
 
-// Add Telegram authorization only when running inside Telegram
-api.interceptors.request.use((config) => {
+API.interceptors.request.use((config) => {
+  const tg = window.Telegram?.WebApp;
+  const initData = tg?.initData;
+
+  // If running outside Telegram → use Dev ChatID
+  if (!initData && import.meta.env.VITE_DEV_CHAT_ID) {
+    config.params = {
+      ...(config.params || {}),
+      chatId: import.meta.env.VITE_DEV_CHAT_ID,
+    };
+  }
+
+  // Telegram MiniApp authentication header
   if (initData) {
     config.headers.Authorization = `tma ${initData}`;
   }
+
   return config;
 });
 
-export default api;
+export default API;
