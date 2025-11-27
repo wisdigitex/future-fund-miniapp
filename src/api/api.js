@@ -6,16 +6,15 @@ const API = axios.create({
 });
 
 API.interceptors.request.use((config) => {
-  const tg = window.Telegram?.WebApp;
-  const initData = tg?.initData;
+const tg = window.Telegram?.WebApp;
+const initData = tg?.initData || "";
 
-  // If running outside Telegram → use Dev ChatID
-  if (!initData && import.meta.env.VITE_DEV_CHAT_ID) {
-    config.params = {
-      ...(config.params || {}),
-      chatId: import.meta.env.VITE_DEV_CHAT_ID,
-    };
-  }
+const api = axios.create({
+  baseURL: API_BASE,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
   // Telegram MiniApp authentication header
   if (initData) {
@@ -25,4 +24,4 @@ API.interceptors.request.use((config) => {
   return config;
 });
 
-export default API;
+export default api;

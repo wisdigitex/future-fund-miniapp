@@ -17,7 +17,7 @@ import Loader from "../components/Loader";
 import ErrorToast from "../components/ErrorToast";
 import useTelegram from "../hooks/useTelegram";
 
-// Static charts (spec – real API doesn’t send chart arrays)
+// Static charts (buyer API does not return chart arrays)
 const portfolioDataMap = {
   "7d": [
     { label: "Nov 1", value: 520 },
@@ -52,50 +52,25 @@ const dailyPnl = [
   { day: "Sun", value: -2.1 },
 ];
 
-const recentTradesStatic = [
-  {
-    pair: "BTCUSDT",
-    side: "LONG x10",
-    time: "2h ago",
-    pnl: "+3.40%",
-    positive: true,
-  },
-  {
-    pair: "ETHUSDT",
-    side: "SHORT x10",
-    time: "5h ago",
-    pnl: "-1.20%",
-    positive: false,
-  },
-  {
-    pair: "SOLUSDT",
-    side: "LONG x10",
-    time: "8h ago",
-    pnl: "+5.80%",
-    positive: true,
-  },
-];
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const { isTelegram } = useTelegram();
 
   const [portfolio, setPortfolio] = useState(null);
+  const [recentTrades, setRecentTrades] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const [timeframe, setTimeframe] = useState("7d");
   const [autoTradingOn, setAutoTradingOn] = useState(false);
 
-  const currentPortfolioData = portfolioDataMap[timeframe] || [];
-  const showAxisLabels =
-    timeframe === "7d"
-      ? ["Nov 1", "Nov 5", "Nov 10", "Nov 15", "Nov 20", "Nov 22 Today"]
-      : timeframe === "1m"
-      ? ["Oct 1", "Oct 10", "Oct 20", "Nov 1", "Nov 10", "Nov 22 Today"]
-      : ["Sep", "Oct", "Nov"];
+  // Dev fallback chatId
+  const devParams =
+    !isTelegram && import.meta.env.VITE_DEV_CHAT_ID
+      ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
+      : undefined;
 
-  // Fetch portfolio
+  /** LOAD PORTFOLIO */
   useEffect(() => {
     let active = true;
 
@@ -104,12 +79,6 @@ export default function Dashboard() {
         setLoading(true);
         setError(null);
 
-        // Dev fallback with chatId if you set VITE_DEV_CHAT_ID in .env
-        const devParams =
-          !isTelegram && import.meta.env.VITE_DEV_CHAT_ID
-            ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
-            : undefined;
-
         const res = await api.get("/api/user/portfolio", {
           params: devParams,
         });
@@ -117,51 +86,60 @@ export default function Dashboard() {
 
         if (!active) return;
 
-        if (!data.ok) {
-          throw new Error(data.error || "Failed to load portfolio");
-        }
-
+        if (!data.ok) throw new Error(data.error);
         setPortfolio(data);
         setAutoTradingOn(data.tradingStatus === "active");
       } catch (err) {
-        if (!active) return;
-        setError(err.message || "Failed to load portfolio");
+        if (active) setError(err.message);
       } finally {
         if (active) setLoading(false);
       }
     }
 
     loadPortfolio();
-    return () => {
-      active = false;
-    };
+    return () => (active = false);
   }, [isTelegram]);
+
+  /** LOAD REAL TRADES (Buyer API gives complete trade history) */
+  useEffect(() => {
+    async function loadTrades() {
+      try {
+        const res = await api.get("/api/bot/trades", { params: devParams });
+        const data = res.data ?? res;
+
+        if (!data.ok) throw new Error(data.error);
+
+        // Filter last 3 days only
+        const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+
+        const filtered = data.trades.filter(
+          (t) => new Date(t.date).getTime() >= threeDaysAgo
+        );
+
+        setRecentTrades(filtered.slice(0, 3)); // show 3 trades only
+      } catch (err) {
+        console.log("Trades load error:", err.message);
+      }
+    }
+    loadTrades();
+  }, []);
 
   const handleDeposit = () => navigate("/deposit");
   const handleWithdraw = () => navigate("/withdraw");
 
   const handleRefresh = async () => {
     if (!portfolio) return;
+
     try {
       setLoading(true);
-      setError(null);
-
-      const devParams =
-        !isTelegram && import.meta.env.VITE_DEV_CHAT_ID
-          ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
-          : undefined;
-
       const res = await api.get("/api/user/portfolio", { params: devParams });
       const data = res.data ?? res;
-
-      if (!data.ok) {
-        throw new Error(data.error || "Failed to refresh portfolio");
-      }
+      if (!data.ok) throw new Error(data.error);
 
       setPortfolio(data);
       setAutoTradingOn(data.tradingStatus === "active");
     } catch (err) {
-      setError(err.message || "Failed to refresh portfolio");
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -172,14 +150,14 @@ export default function Dashboard() {
     setAutoTradingOn(next);
 
     try {
-      const res = await api.post("/api/user/trading/toggle", { active: next });
+      const res = await api.post("/api/user/trading/toggle", {
+        active: next,
+      });
       const data = res.data ?? res;
-      if (!data.ok) {
-        throw new Error(data.error || "Failed to update trading status");
-      }
+      if (!data.ok) throw new Error(data.error);
     } catch (err) {
       setAutoTradingOn((prev) => !prev);
-      setError(err.message || "Failed to update trading status");
+      setError(err.message);
     }
   };
 
@@ -213,10 +191,10 @@ export default function Dashboard() {
   const totalWithdrawals = portfolio.totalWithdrawals ?? 0;
   const referralEarned = portfolio.totalReferralRewards ?? 0;
 
-  const winRate = 71.4; // from spec (stats endpoint), not this API
+  const winRate = 71.4;
   const winRateChange = 2.3;
 
-  const recentTrades = recentTradesStatic;
+  const currentPortfolioData = portfolioDataMap[timeframe];
 
   return (
     <div className="screen">
@@ -339,8 +317,8 @@ export default function Dashboard() {
           </div>
 
           <div className="chart-axis-footer">
-            {showAxisLabels.map((label) => (
-              <span key={label}>{label}</span>
+            {currentPortfolioData.map((d) => (
+              <span key={d.label}>{d.label}</span>
             ))}
           </div>
         </section>
@@ -354,6 +332,7 @@ export default function Dashboard() {
               <p className="stats-value">${totalDeposits.toFixed(2)}</p>
             </div>
           </div>
+
           <div className="card-soft stats-item">
             <div className="stats-icon orange">↓</div>
             <div className="stats-content">
@@ -361,6 +340,7 @@ export default function Dashboard() {
               <p className="stats-value">${totalWithdrawals.toFixed(2)}</p>
             </div>
           </div>
+
           <div className="card-soft stats-item">
             <div className="stats-icon pink">🎁</div>
             <div className="stats-content">
@@ -368,6 +348,7 @@ export default function Dashboard() {
               <p className="stats-value">${referralEarned.toFixed(2)}</p>
             </div>
           </div>
+
           <div className="card-soft stats-item">
             <div className="stats-content">
               <p className="stats-label">Win Rate</p>
@@ -447,34 +428,49 @@ export default function Dashboard() {
           </button>
         </section>
 
-        {/* RECENT TRADES */}
+        {/* RECENT TRADES (REAL) */}
         <section className="card-soft recent-card">
           <div className="recent-header">
             <span className="section-title">Recent Trades</span>
-            <button className="recent-viewall" type="button">
+            <button
+              className="recent-viewall"
+              type="button"
+              onClick={() => navigate("/stats")}
+            >
               View All →
             </button>
           </div>
 
           <div className="recent-list">
-            {recentTrades.map((t) => (
-              <div key={t.pair + t.time} className="recent-item">
-                <div className="recent-left">
-                  <div className={`recent-icon ${t.positive ? "green" : "red"}`}>
-                    {t.positive ? "↗" : "↘"}
+            {recentTrades.length === 0 && (
+              <p className="empty-text">No recent trades in the last 3 days.</p>
+            )}
+
+            {recentTrades.map((t) => {
+              const positive = t.shownReturnPct >= 0;
+
+              return (
+                <div key={t.id} className="recent-item">
+                  <div className="recent-left">
+                    <div className={`recent-icon ${positive ? "green" : "red"}`}>
+                      {positive ? "↗" : "↘"}
+                    </div>
+                    <div>
+                      <p className="recent-pair">{t.pair}</p>
+                      <p className="recent-side">
+                        {t.direction.toUpperCase()} x{t.leverage} •{" "}
+                        {new Date(t.date).toLocaleDateString()}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="recent-pair">{t.pair}</p>
-                    <p className="recent-side">
-                      {t.side} • {t.time}
-                    </p>
-                  </div>
+
+                  <p className={`recent-pnl ${positive ? "green" : "red"}`}>
+                    {positive ? "+" : ""}
+                    {t.shownReturnPct.toFixed(2)}%
+                  </p>
                 </div>
-                <p className={`recent-pnl ${t.positive ? "green" : "red"}`}>
-                  {t.pnl}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       </div>
