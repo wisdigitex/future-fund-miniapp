@@ -344,12 +344,26 @@ body {
 }
 
 .chart-axis-footer {
-  margin-top: 8px;
-  font-size: 10px;
-  color: #6b7280;
   display: flex;
   justify-content: space-between;
+  padding: 0 8px;
+  margin-top: 6px;
+  flex-wrap: nowrap;      /* prevents breaking into two lines */
+  overflow-x: auto;       /* enables horizontal scroll if needed */
+  scrollbar-width: none;  /* hides scrollbar for Firefox */
 }
+
+.chart-axis-footer::-webkit-scrollbar {
+  display: none;          /* hides scrollbar for Chrome/Safari */
+}
+
+.chart-axis-footer span {
+  white-space: nowrap;    /* prevents text wrapping */
+  font-size: 10px;
+  color: #94a3b8;
+  padding-right: 12px;    /* spacing between dates */
+}
+
 
 /* stats grid */
 
