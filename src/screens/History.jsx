@@ -116,28 +116,54 @@ export default function History() {
           <Loader />
         ) : (
           <div className="history-list">
-            {transactions.map((t, idx) => (
-              <div key={t.id || idx} className="history-item card-soft">
-                <div className="history-left">
-                  <div className={`history-icon ${t.sign === "+" ? "green" : "red"}`}>
-                    {t.sign === "+" ? "↗" : "↘"}
-                  </div>
-                  <div>
-                    <p className="history-type">{t.type}</p>
-                    <p className="history-sub">{t.title}</p>
-                  </div>
-                </div>
+            {transactions.map((t, idx) => {
+              const isTrade = t.type === "trade";
 
-                <div className="history-right">
-                  <p className={`history-amount ${t.sign === "+" ? "green" : "red"}`}>
-                    {t.rawChange}
-                  </p>
-                  <p className="history-date">
-                    {new Date(t.date).toLocaleString()}
-                  </p>
+              // Extract safe values
+              const pair = t.pair || "Trade";
+              const direction = t.direction ? t.direction.toUpperCase() : "";
+              const leverage = t.leverage ? ` x${t.leverage}` : "";
+
+              return (
+                <div key={t.id || idx} className="history-item card-soft">
+                  <div className="history-left">
+                    <div
+                      className={`history-icon ${t.sign === "+" ? "green" : "red"}`}
+                    >
+                      {t.sign === "+" ? "↗" : "↘"}
+                    </div>
+
+                    <div>
+                      {/* TRADE TITLE */}
+                      <p className="history-type">
+                        {isTrade ? pair : t.type}
+                      </p>
+
+                      {/* TRADE DETAILS OR NORMAL SUBTEXT */}
+                      <p className="history-sub">
+                        {isTrade
+                          ? `${direction}${leverage}`
+                          : t.title}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="history-right">
+                    <p
+                      className={`history-amount ${
+                        t.sign === "+" ? "green" : "red"
+                      }`}
+                    >
+                      {t.rawChange}
+                    </p>
+
+                    <p className="history-date">
+                      {new Date(t.date).toLocaleString()}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
