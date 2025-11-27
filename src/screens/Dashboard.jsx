@@ -82,6 +82,7 @@ export default function Dashboard() {
         const res = await api.get("/api/user/portfolio", {
           params: devParams,
         });
+
         const data = res.data ?? res;
 
         if (!active) return;
@@ -100,27 +101,30 @@ export default function Dashboard() {
     return () => (active = false);
   }, [isTelegram]);
 
-  /** LOAD REAL TRADES (Buyer API gives complete trade history) */
+  /** LOAD REAL TRADES (using correct /api/stats endpoint) */
   useEffect(() => {
     async function loadTrades() {
       try {
-        const res = await api.get("/api/bot/trades", { params: devParams });
+        const res = await api.get("/api/stats", {
+          params: {
+            timeframe: "3d",
+            ...devParams,
+          },
+        });
+
         const data = res.data ?? res;
 
         if (!data.ok) throw new Error(data.error);
 
-        // Filter last 3 days only
-        const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
+        // API returns: { ok, summary, trades: [...] }
+        const trades = data.trades.slice(0, 3); // last 3 days (already filtered by timeframe)
 
-        const filtered = data.trades.filter(
-          (t) => new Date(t.date).getTime() >= threeDaysAgo
-        );
-
-        setRecentTrades(filtered.slice(0, 3)); // show 3 trades only
+        setRecentTrades(trades);
       } catch (err) {
         console.log("Trades load error:", err.message);
       }
     }
+
     loadTrades();
   }, []);
 
