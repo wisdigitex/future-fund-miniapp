@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";   // ✅ ADDED
 import NavBar from "../components/NavBar";
 import api from "../api/api";
 import Loader from "../components/Loader";
@@ -6,6 +7,8 @@ import ErrorToast from "../components/ErrorToast";
 import useTelegram from "../hooks/useTelegram";
 
 export default function Deposit() {
+  const navigate = useNavigate();                 // ✅ ADDED
+
   const [step, setStep] = useState(1);
 
   const [amount, setAmount] = useState(100);
@@ -142,7 +145,7 @@ export default function Deposit() {
       } catch (err) {
         console.log("Status check failed:", err.message);
       }
-    }, 8000); // check every 8s like most crypto APIs
+    }, 8000);
 
     return () => clearInterval(interval);
   }, [deposit]);
@@ -233,7 +236,15 @@ export default function Deposit() {
 
             {/* Buttons */}
             <div className="button-row">
-              <button className="btn-cancel">Cancel</button>
+              
+              {/* ✅ FIXED — Cancel now returns to Dashboard */}
+              <button
+                className="btn-cancel"
+                onClick={() => navigate("/")}
+              >
+                Cancel
+              </button>
+
               <button className="btn-continue" onClick={handleContinue}>
                 Continue
               </button>
