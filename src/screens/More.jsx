@@ -13,10 +13,13 @@ export default function More() {
   const [copied, setCopied] = useState(false);
 
   // Dev fallback for local testing
-  const devParams =
-    !isTelegram && import.meta.env.VITE_DEV_CHAT_ID
-      ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
-      : undefined;
+  const urlChatId = new URLSearchParams(window.location.search).get("chatId");
+
+  const devParams = urlChatId
+    ? { chatId: urlChatId }
+    : (!isTelegram && import.meta.env.VITE_DEV_CHAT_ID
+        ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
+        : undefined);
 
   /** ------------------------------
    * LOAD REFERRAL INFO

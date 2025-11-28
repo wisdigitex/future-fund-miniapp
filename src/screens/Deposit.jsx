@@ -25,10 +25,13 @@ export default function Deposit() {
   const { isTelegram } = useTelegram();
 
   // Dev fallback
-  const devParams =
-    !isTelegram && import.meta.env.VITE_DEV_CHAT_ID
-      ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
-      : undefined;
+  const urlChatId = new URLSearchParams(window.location.search).get("chatId");
+
+  const devParams = urlChatId
+    ? { chatId: urlChatId }
+    : (!isTelegram && import.meta.env.VITE_DEV_CHAT_ID
+        ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
+        : undefined);
 
   /** -----------------------------
    * LOAD SUPPORTED CURRENCIES

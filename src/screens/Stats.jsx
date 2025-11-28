@@ -18,10 +18,13 @@ export default function Stats() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const devParams =
-    !isTelegram && import.meta.env.VITE_DEV_CHAT_ID
-      ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
-      : undefined;
+  const urlChatId = new URLSearchParams(window.location.search).get("chatId");
+
+  const devParams = urlChatId
+    ? { chatId: urlChatId }
+    : (!isTelegram && import.meta.env.VITE_DEV_CHAT_ID
+        ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
+        : undefined);
 
   // Load stats from API
   async function loadStats() {

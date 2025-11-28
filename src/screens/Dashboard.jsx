@@ -31,12 +31,16 @@ export default function Dashboard() {
 
   const [timeframe, setTimeframe] = useState("7d");
   const [autoTradingOn, setAutoTradingOn] = useState(false);
+  
 
   // Dev fallback chatId
-  const devParams =
-    !isTelegram && import.meta.env.VITE_DEV_CHAT_ID
-      ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
-      : undefined;
+  const urlChatId = new URLSearchParams(window.location.search).get("chatId");
+
+  const devParams = urlChatId
+    ? { chatId: urlChatId }
+    : (!isTelegram && import.meta.env.VITE_DEV_CHAT_ID
+        ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
+        : undefined);
 
   /** --------------------
    * LOAD PORTFOLIO
