@@ -8,7 +8,15 @@ const items = [
 ];
 
 export default function NavBar() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+
+  // Read chatId from query params
+  const params = new URLSearchParams(search);
+  const chatId = params.get("chatId");
+
+  function buildPath(path) {
+    return chatId ? `${path}?chatId=${chatId}` : path;
+  }
 
   function isActive(path) {
     if (path === "/") return pathname === "/";
@@ -23,7 +31,7 @@ export default function NavBar() {
         return (
           <Link
             key={item.path}
-            to={item.path}
+            to={buildPath(item.path)}
             className={active ? "nav-active" : ""}
           >
             <div className={`icon-circle ${active ? "icon-active" : ""}`}>

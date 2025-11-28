@@ -189,8 +189,17 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeframe, isTelegram]);
 
-  const handleDeposit = () => navigate("/deposit");
-  const handleWithdraw = () => navigate("/withdraw");
+  // Extract chatId from URL
+  const chatId = new URLSearchParams(window.location.search).get("chatId");
+
+  // Helper to preserve chatId in navigation
+  function go(path) {
+    if (chatId) navigate(`${path}?chatId=${chatId}`);
+    else navigate(path);
+  }
+
+  const handleDeposit = () => go("/deposit");
+  const handleWithdraw = () => go("/withdraw");
 
   const handleRefresh = async () => {
     if (!portfolio) return;
@@ -203,12 +212,19 @@ export default function Dashboard() {
       const data = res.data ?? res;
       if (!data.ok) throw new Error(data.error || "Failed to refresh");
 
+      // stays
       setPortfolio(data);
       setAutoTradingOn(data.tradingStatus === "active");
     } catch (err) {
       setError(err.message || "Failed to refresh portfolio");
     } finally {
       setLoading(false);
+    }
+
+    // 🔥 ensure URL stays correct after refreshing
+    if (chatId) {
+      const url = `/?chatId=${chatId}`;
+      window.history.replaceState({}, "", url);
     }
   };
 
@@ -502,8 +518,7 @@ export default function Dashboard() {
             <button
               className="recent-viewall"
               type="button"
-              onClick={() => navigate("/stats")}
-            >
+              onClick={() => go("/stats")}            >
               View All →
             </button>
           </div>

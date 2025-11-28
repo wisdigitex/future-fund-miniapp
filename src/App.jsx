@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import useTelegram from "./hooks/useTelegram";   // ✅ fixed path
 import NavBar from "./components/NavBar";
 
+
 function App() {
   const { tg } = useTelegram();
 
