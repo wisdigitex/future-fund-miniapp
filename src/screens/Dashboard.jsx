@@ -23,7 +23,7 @@ export default function Dashboard() {
 
   const [portfolio, setPortfolio] = useState(null);
   const [recentTrades, setRecentTrades] = useState([]);
-  const [portfolioSeriesByTf, setPortfolioSeriesByTf] = useState({});
+  const [portfolioHistory, setPortfolioHistory] = useState([]);
   const [dailyPnlSeries, setDailyPnlSeries] = useState([]);
 
   const [loading, setLoading] = useState(true);
@@ -31,11 +31,14 @@ export default function Dashboard() {
 
   const [timeframe, setTimeframe] = useState("7d");
   const [autoTradingOn, setAutoTradingOn] = useState(false);
-  
 
-  // Dev fallback chatId
+  /** -----------------------------
+   * CHAT ID HANDLING (Preview Mode)
+   * ----------------------------- */
   const urlChatId = new URLSearchParams(window.location.search).get("chatId");
   const storedPreviewId = sessionStorage.getItem("preview_chatId");
+
+  if (urlChatId) sessionStorage.setItem("preview_chatId", urlChatId);
 
   const devParams = urlChatId
     ? { chatId: urlChatId }
@@ -45,9 +48,9 @@ export default function Dashboard() {
         ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
         : undefined);
 
-  /** --------------------
-   * LOAD PORTFOLIO
-   * -------------------- */
+  /** -----------------------------
+   * LOAD USER PORTFOLIO
+   * ----------------------------- */
   useEffect(() => {
     let active = true;
 
@@ -56,146 +59,127 @@ export default function Dashboard() {
         setLoading(true);
         setError(null);
 
-        const res = await api.get("/api/user/portfolio", {
-          params: devParams,
-        });
-
+        const res = await api.get("/api/user/portfolio", { params: devParams });
         const data = res.data ?? res;
 
         if (!active) return;
+        if (!data.ok) throw new Error(data.error);
 
-        if (!data.ok) throw new Error(data.error || "Failed to load portfolio");
         setPortfolio(data);
         setAutoTradingOn(data.tradingStatus === "active");
       } catch (err) {
-        if (active) setError(err.message || "Failed to load portfolio");
+        if (active) setError(err.message);
       } finally {
         if (active) setLoading(false);
       }
     }
 
     loadPortfolio();
-    return () => {
-      active = false;
-    };
+    return () => (active = false);
   }, [isTelegram]);
 
-  /** --------------------
-   * LOAD STATS FOR DASHBOARD
-   * - Portfolio Growth (7d / 1m / 3m)
-   * - Daily PnL (Last 7 days)
-   * - Recent Trades (last 3 days)
-   * -------------------- */
+  /** -----------------------------
+   * LOAD REAL PORTFOLIO HISTORY
+   * FROM NEW ENDPOINT
+   * ----------------------------- */
   useEffect(() => {
-    // If we already have data for this timeframe, don't refetch
-    if (portfolioSeriesByTf[timeframe]) return;
-
-    let active = true;
-
-    async function loadStatsForTimeframe(tf) {
+    async function loadPortfolioHistory() {
       try {
-        const res = await api.get("/api/stats", {
-          params: {
-            timeframe: tf,
-            ...devParams,
-          },
+        const res = await api.get("/api/user/portfolio-history", {
+          params: { timeframe, ...devParams },
         });
 
         const data = res.data ?? res;
-        if (!data.ok) throw new Error(data.error || "Failed to load stats");
+        if (!data.ok) throw new Error(data.error);
 
-        const trades = Array.isArray(data.trades) ? data.trades : [];
-
-        // ----- PORTFOLIO GROWTH SERIES -----
-        const sortedTrades = [...trades].sort(
-          (a, b) => new Date(a.date) - new Date(b.date)
-        );
-
-        let cumulative = 0;
-        const portfolioSeries = sortedTrades.map((t) => {
-          const impact = Number(t.portfolioImpactPct ?? 0);
-          cumulative += impact;
-          const d = new Date(t.date);
-          return {
-            label: d.toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            }),
-            value: Number(cumulative.toFixed(2)),
-          };
-        });
-
-        if (!active) return;
-
-        setPortfolioSeriesByTf((prev) => ({
-          ...prev,
-          [tf]: portfolioSeries.length
-            ? portfolioSeries
-            : [{ label: "No trades", value: 0 }],
+        const series = data.dataPoints.map((p) => ({
+          label: new Date(p.date).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          }),
+          value: Number(p.balance),
         }));
 
-        // ----- EXTRA THINGS ONLY FOR 7D -----
-        if (tf === "7d") {
-          // 1) Daily PnL last 7 days (by calendar day)
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-
-          const last7 = [];
-          const dayMap = new Map();
-
-          for (let i = 6; i >= 0; i--) {
-            const d = new Date(today);
-            d.setDate(today.getDate() - i);
-            const key = d.toISOString().slice(0, 10);
-            const label = d.toLocaleDateString(undefined, {
-              weekday: "short",
-            });
-            last7.push({ key, label });
-            dayMap.set(key, 0);
-          }
-
-          sortedTrades.forEach((t) => {
-            const d = new Date(t.date);
-            d.setHours(0, 0, 0, 0);
-            const key = d.toISOString().slice(0, 10);
-            if (!dayMap.has(key)) return;
-            const impact = Number(t.portfolioImpactPct ?? 0);
-            dayMap.set(key, dayMap.get(key) + impact);
-          });
-
-          const dailySeries = last7.map((d) => ({
-            day: d.label,
-            value: Number((dayMap.get(d.key) || 0).toFixed(2)),
-          }));
-
-          setDailyPnlSeries(dailySeries);
-
-          // 2) Recent trades: last 3 days, newest first
-          const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
-          const recent = sortedTrades
-            .filter((t) => new Date(t.date).getTime() >= threeDaysAgo)
-            .sort((a, b) => new Date(b.date) - new Date(a.date))
-            .slice(0, 3);
-
-          setRecentTrades(recent);
-        }
+        setPortfolioHistory(series.length ? series : [{ label: "No Data", value: 0 }]);
       } catch (err) {
-        console.log("Stats load error:", err.message || err);
+        console.log("Portfolio history error:", err.message);
       }
     }
 
-    loadStatsForTimeframe(timeframe);
+    loadPortfolioHistory();
+  }, [timeframe]);
 
-    return () => {
-      active = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeframe, isTelegram]);
+  /** -----------------------------
+   * LOAD RECENT TRADES + DAILY PNL
+   * ----------------------------- */
+  useEffect(() => {
+    async function loadTrades() {
+      try {
+        const res = await api.get("/api/stats", {
+          params: { timeframe: "7d", ...devParams },
+        });
 
-  // Extract chatId from URL
-  const chatId = new URLSearchParams(window.location.search).get("chatId");
+        const data = res.data ?? res;
+        if (!data.ok) throw new Error(data.error);
 
-  // Helper to preserve chatId in navigation
+        const trades = data.trades || [];
+
+        // RECENT TRADES (3d)
+        const threeDaysAgo = Date.now() - 3 * 86400000;
+        const recent = trades
+          .filter((t) => new Date(t.date).getTime() >= threeDaysAgo)
+          .sort((a, b) => new Date(b.date) - new Date(a.date))
+          .slice(0, 3);
+
+        setRecentTrades(recent);
+
+        // DAILY PNL (last 7 days)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const last7 = [];
+        const dayMap = new Map();
+
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(today);
+          d.setDate(today.getDate() - i);
+          const key = d.toISOString().slice(0, 10);
+          const label = d.toLocaleDateString(undefined, { weekday: "short" });
+
+          last7.push({ key, label });
+          dayMap.set(key, 0);
+        }
+
+        trades.forEach((t) => {
+          const d = new Date(t.date);
+          d.setHours(0, 0, 0, 0);
+
+          const key = d.toISOString().slice(0, 10);
+          if (!dayMap.has(key)) return;
+
+          const impact = Number(t.portfolioImpactPct ?? 0);
+          dayMap.set(key, dayMap.get(key) + impact);
+        });
+
+        setDailyPnlSeries(
+          last7.map((d) => ({
+            day: d.label,
+            value: Number((dayMap.get(d.key) || 0).toFixed(2)),
+          }))
+        );
+      } catch (err) {
+        console.log("Trades error:", err.message);
+      }
+    }
+
+    loadTrades();
+  }, []);
+
+  /** -----------------------------
+   * NAVIGATION WITH PERSISTENT chatId
+   * ----------------------------- */
+  const chatId = urlChatId || storedPreviewId;
+
   function go(path) {
     if (chatId) navigate(`${path}?chatId=${chatId}`);
     else navigate(path);
@@ -209,25 +193,17 @@ export default function Dashboard() {
 
     try {
       setLoading(true);
-      setError(null);
 
       const res = await api.get("/api/user/portfolio", { params: devParams });
       const data = res.data ?? res;
-      if (!data.ok) throw new Error(data.error || "Failed to refresh");
 
-      // stays
+      if (!data.ok) throw new Error(data.error);
       setPortfolio(data);
       setAutoTradingOn(data.tradingStatus === "active");
     } catch (err) {
-      setError(err.message || "Failed to refresh portfolio");
+      setError(err.message);
     } finally {
       setLoading(false);
-    }
-
-    // 🔥 ensure URL stays correct after refreshing
-    if (chatId) {
-      const url = `/?chatId=${chatId}`;
-      window.history.replaceState({}, "", url);
     }
   };
 
@@ -236,17 +212,17 @@ export default function Dashboard() {
     setAutoTradingOn(next);
 
     try {
-      const res = await api.post("/api/user/trading/toggle", {
-        active: next,
-      });
-      const data = res.data ?? res;
-      if (!data.ok) throw new Error(data.error || "Failed to update");
+      const res = await api.post("/api/user/trading/toggle", { active: next });
+      if (!res.data.ok) throw new Error(res.data.error);
     } catch (err) {
       setAutoTradingOn((prev) => !prev);
-      setError(err.message || "Failed to update trading status");
+      setError(err.message);
     }
   };
 
+  /** -----------------------------
+   * RENDER
+   * ----------------------------- */
   if (loading && !portfolio) {
     return (
       <div className="screen">
@@ -260,9 +236,7 @@ export default function Dashboard() {
   if (!portfolio) {
     return (
       <div className="screen">
-        <div className="phone-shell">
-          {error && <ErrorToast message={error} />}
-        </div>
+        <div className="phone-shell">{error && <ErrorToast message={error} />}</div>
       </div>
     );
   }
@@ -270,6 +244,7 @@ export default function Dashboard() {
   const balance = portfolio.balance ?? 0;
   const todayAmount = portfolio.todayPnl?.amount ?? 0;
   const todayPercent = portfolio.todayPnl?.percent ?? 0;
+
   const allTimeAmount = portfolio.estimatedNetProfit ?? 0;
   const allTimePercent = portfolio.estimatedNetProfitPct ?? 0;
 
@@ -277,10 +252,8 @@ export default function Dashboard() {
   const totalWithdrawals = portfolio.totalWithdrawals ?? 0;
   const referralEarned = portfolio.totalReferralRewards ?? 0;
 
-  const winRate = 71.4; // stays from global stats, not per-user
+  const winRate = 71.4;
   const winRateChange = 2.3;
-
-  const currentPortfolioData = portfolioSeriesByTf[timeframe] || [];
 
   return (
     <div className="screen">
@@ -300,7 +273,6 @@ export default function Dashboard() {
               <p className="balance-amount">${balance.toFixed(2)}</p>
 
               <div className="balance-sub-row">
-                {/* Today */}
                 <div className="balance-sub-item">
                   <div className="icon-circle red">
                     <span>↓</span>
@@ -316,7 +288,6 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* All Time */}
                 <div className="balance-sub-item">
                   <div className="icon-circle green">
                     <span>↑</span>
@@ -354,12 +325,12 @@ export default function Dashboard() {
           </button>
         </section>
 
-        {/* PORTFOLIO GROWTH */}
+        {/* REAL PORTFOLIO GROWTH CHART */}
         <section className="card-glass portfolio-card">
           <div className="section-header">
             <span className="section-title">Portfolio Growth</span>
             <div className="timeframe-tabs">
-              {["7d", "1m", "3m"].map((tf) => (
+              {["7d", "1m", "3m", "all"].map((tf) => (
                 <button
                   key={tf}
                   className={timeframe === tf ? "chip chip-active" : "chip"}
@@ -373,13 +344,14 @@ export default function Dashboard() {
 
           <div className="chart-wrapper">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={currentPortfolioData}>
+              <AreaChart data={portfolioHistory}>
                 <defs>
                   <linearGradient id="pfGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#22c55e" stopOpacity={0.9} />
                     <stop offset="100%" stopColor="#22c55e" stopOpacity={0.05} />
                   </linearGradient>
                 </defs>
+
                 <AreaTooltip
                   contentStyle={{
                     background: "#020617",
@@ -387,8 +359,8 @@ export default function Dashboard() {
                     borderRadius: 12,
                     fontSize: 11,
                   }}
-                  labelFormatter={(v) => v}
                 />
+
                 <Area
                   type="monotone"
                   dataKey="value"
@@ -403,7 +375,7 @@ export default function Dashboard() {
           </div>
 
           <div className="chart-axis-footer">
-            {currentPortfolioData.map((d) => (
+            {portfolioHistory.map((d) => (
               <span key={d.label}>{d.label}</span>
             ))}
           </div>
@@ -468,7 +440,6 @@ export default function Dashboard() {
                     borderRadius: 12,
                     fontSize: 11,
                   }}
-                  formatter={(value) => [`${value.toFixed(2)}%`, "PnL"]}
                 />
                 <Bar
                   dataKey="value"
@@ -514,14 +485,15 @@ export default function Dashboard() {
           </button>
         </section>
 
-        {/* RECENT TRADES (REAL) */}
+        {/* RECENT TRADES */}
         <section className="card-soft recent-card">
           <div className="recent-header">
             <span className="section-title">Recent Trades</span>
             <button
               className="recent-viewall"
               type="button"
-              onClick={() => go("/stats")}            >
+              onClick={() => go("/stats")}
+            >
               View All →
             </button>
           </div>
@@ -543,7 +515,7 @@ export default function Dashboard() {
                     <div>
                       <p className="recent-pair">{t.pair}</p>
                       <p className="recent-side">
-                        {t.direction.toUpperCase()} {t.leverage} •{" "}
+                        {t.direction?.toUpperCase()} x{t.leverage} •{" "}
                         {new Date(t.date).toLocaleDateString()}
                       </p>
                     </div>
