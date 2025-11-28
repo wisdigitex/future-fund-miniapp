@@ -26,19 +26,21 @@ export default function History() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
 
-const urlChatId = new URLSearchParams(window.location.search).get("chatId");
-const storedPreviewId = sessionStorage.getItem("preview_chatId");
+  /** Persistent Chat ID */
+  const urlChatId = new URLSearchParams(window.location.search).get("chatId");
+  const storedPreviewId = sessionStorage.getItem("preview_chatId");
 
-const devParams = urlChatId
-  ? { chatId: urlChatId }
-  : storedPreviewId
-  ? { chatId: storedPreviewId }
-  : (!isTelegram && import.meta.env.VITE_DEV_CHAT_ID
-      ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
-      : undefined);
+  if (urlChatId) sessionStorage.setItem("preview_chatId", urlChatId);
 
+  const devParams = urlChatId
+    ? { chatId: urlChatId }
+    : storedPreviewId
+    ? { chatId: storedPreviewId }
+    : (!isTelegram && import.meta.env.VITE_DEV_CHAT_ID
+        ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
+        : undefined);
 
-  // Fetch history
+  /** Load history */
   async function loadHistory(reset = false) {
     try {
       if (reset) {
@@ -74,12 +76,10 @@ const devParams = urlChatId
     }
   }
 
-  // When filter changes: reset + reload
   useEffect(() => {
     loadHistory(true);
   }, [selected]);
 
-  // Load more (pagination)
   const handleLoadMore = () => {
     setOffset((o) => o + 20);
     loadHistory(false);
@@ -108,7 +108,7 @@ const devParams = urlChatId
           ))}
         </div>
 
-        {/* Sliding underline */}
+        {/* Underline */}
         <div className="tabs-underline">
           <div
             className="underline-active"
@@ -118,49 +118,61 @@ const devParams = urlChatId
           />
         </div>
 
-        {/* If first load → show loader */}
+        {/* Content */}
         {loading ? (
           <Loader />
         ) : (
           <div className="history-list">
             {transactions.map((t, idx) => {
               const isTrade = t.type === "trade";
+              const isReferral = t.type === "referral";
+              const positive = t.sign === "+";
 
-              // Extract safe values
-              const pair = t.pair || "Trade";
-              const direction = t.direction ? t.direction.toUpperCase() : "";
+              /** TRADE FIELDS */
+              const pair = t.pair || "TRADE";
+              const direction = t.direction?.toUpperCase() || "";
               const leverage = t.leverage ? ` x${t.leverage}` : "";
+
+              /** REFERRAL FIELDS */
+              const level = t.level || ""; // L1 / L2
+              const username = t.fromUsername || "Unknown user";
+              const fromId = t.fromChatId ? `(${t.fromChatId})` : "";
 
               return (
                 <div key={t.id || idx} className="history-item card-soft">
+                  {/* LEFT SIDE */}
                   <div className="history-left">
-                    <div
-                      className={`history-icon ${t.sign === "+" ? "green" : "red"}`}
-                    >
-                      {t.sign === "+" ? "↗" : "↘"}
+                    <div className={`history-icon ${positive ? "green" : "red"}`}>
+                      {positive ? "↗" : "↘"}
                     </div>
 
                     <div>
-                      {/* TRADE TITLE */}
+                      {/* MAIN TITLE */}
                       <p className="history-type">
-                        {isTrade ? pair : t.type}
+                        {isTrade
+                          ? pair
+                          : isReferral
+                          ? "Referral Reward"
+                          : t.type}
                       </p>
 
-                      {/* TRADE DETAILS OR NORMAL SUBTEXT */}
-                      <p className="history-sub">
-                        {isTrade
-                          ? `${direction}${leverage}`
-                          : t.title}
-                      </p>
+                      {/* SUBTEXT */}
+                      {isReferral ? (
+                        <p className="history-sub">
+                          {level ? `${level} • ` : ""}
+                          {username} {fromId}
+                        </p>
+                      ) : (
+                        <p className="history-sub">
+                          {isTrade ? `${direction}${leverage}` : t.title}
+                        </p>
+                      )}
                     </div>
                   </div>
 
+                  {/* RIGHT SIDE */}
                   <div className="history-right">
-                    <p
-                      className={`history-amount ${
-                        t.sign === "+" ? "green" : "red"
-                      }`}
-                    >
+                    <p className={`history-amount ${positive ? "green" : "red"}`}>
                       {t.rawChange}
                     </p>
 
