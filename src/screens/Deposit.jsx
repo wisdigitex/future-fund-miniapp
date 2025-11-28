@@ -25,13 +25,17 @@ export default function Deposit() {
   const { isTelegram } = useTelegram();
 
   // Dev fallback
-  const urlChatId = new URLSearchParams(window.location.search).get("chatId");
+const urlChatId = new URLSearchParams(window.location.search).get("chatId");
+const storedPreviewId = sessionStorage.getItem("preview_chatId");
 
-  const devParams = urlChatId
-    ? { chatId: urlChatId }
-    : (!isTelegram && import.meta.env.VITE_DEV_CHAT_ID
-        ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
-        : undefined);
+const devParams = urlChatId
+  ? { chatId: urlChatId }
+  : storedPreviewId
+  ? { chatId: storedPreviewId }
+  : (!isTelegram && import.meta.env.VITE_DEV_CHAT_ID
+      ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
+      : undefined);
+
 
   /** -----------------------------
    * LOAD SUPPORTED CURRENCIES
