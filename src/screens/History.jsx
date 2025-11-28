@@ -4,7 +4,7 @@ import ErrorToast from "../components/ErrorToast";
 import Loader from "../components/Loader";
 import useTelegram from "../hooks/useTelegram";
 
-// API filter mapping
+// API filters mapping
 const filterMap = {
   All: "all",
   Trade: "trade",
@@ -31,9 +31,7 @@ export default function History() {
       ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
       : undefined;
 
-  /** -----------------------------
-   * LOAD HISTORY
-   * ----------------------------- */
+  // Fetch history
   async function loadHistory(reset = false) {
     try {
       if (reset) {
@@ -69,37 +67,17 @@ export default function History() {
     }
   }
 
-  // Reload when filter changes
+  // When filter changes: reset + reload
   useEffect(() => {
     loadHistory(true);
   }, [selected]);
 
-  // Pagination
+  // Load more (pagination)
   const handleLoadMore = () => {
-    setOffset((prev) => prev + 20);
+    setOffset((o) => o + 20);
     loadHistory(false);
   };
 
-  /** -----------------------------
-   * Helpers for UI text
-   * ----------------------------- */
-
-  function getSubText(t) {
-    switch (t.type) {
-      case "trade":
-        return `${t.pair} • ${t.direction.toUpperCase()} x${t.leverage}`;
-
-      case "referral":
-        return `Level ${t.level} • ${t.fromUsername || "User"} • ${t.fromChatId}`;
-
-      default:
-        return t.title;
-    }
-  }
-
-  /** -----------------------------
-   * RENDER
-   * ----------------------------- */
   return (
     <div className="screen">
       <div className="phone-shell">
@@ -107,9 +85,10 @@ export default function History() {
 
         {error && <ErrorToast message={error} />}
 
+        {/* Title */}
         <h2 className="history-title">Transaction History</h2>
 
-        {/* Tabs */}
+        {/* Filter Tabs */}
         <div className="history-tabs">
           {filters.map((f) => (
             <button
@@ -122,7 +101,7 @@ export default function History() {
           ))}
         </div>
 
-        {/* Underline */}
+        {/* Sliding underline */}
         <div className="tabs-underline">
           <div
             className="underline-active"
@@ -132,34 +111,52 @@ export default function History() {
           />
         </div>
 
-        {/* First load → show loader */}
+        {/* If first load → show loader */}
         {loading ? (
           <Loader />
         ) : (
           <div className="history-list">
             {transactions.map((t, idx) => {
-              const positive = t.sign === "+";
+              const isTrade = t.type === "trade";
+
+              // Extract safe values
+              const pair = t.pair || "Trade";
+              const direction = t.direction ? t.direction.toUpperCase() : "";
+              const leverage = t.leverage ? ` x${t.leverage}` : "";
 
               return (
                 <div key={t.id || idx} className="history-item card-soft">
                   <div className="history-left">
-                    <div className={`history-icon ${positive ? "green" : "red"}`}>
-                      {positive ? "↗" : "↘"}
+                    <div
+                      className={`history-icon ${t.sign === "+" ? "green" : "red"}`}
+                    >
+                      {t.sign === "+" ? "↗" : "↘"}
                     </div>
 
                     <div>
-                      {/* Title (Trade / Deposit / Withdraw / Referral) */}
-                      <p className="history-type">{t.type}</p>
+                      {/* TRADE TITLE */}
+                      <p className="history-type">
+                        {isTrade ? pair : t.type}
+                      </p>
 
-                      {/* Dynamic details */}
-                      <p className="history-sub">{getSubText(t)}</p>
+                      {/* TRADE DETAILS OR NORMAL SUBTEXT */}
+                      <p className="history-sub">
+                        {isTrade
+                          ? `${direction}${leverage}`
+                          : t.title}
+                      </p>
                     </div>
                   </div>
 
                   <div className="history-right">
-                    <p className={`history-amount ${positive ? "green" : "red"}`}>
+                    <p
+                      className={`history-amount ${
+                        t.sign === "+" ? "green" : "red"
+                      }`}
+                    >
                       {t.rawChange}
                     </p>
+
                     <p className="history-date">
                       {new Date(t.date).toLocaleString()}
                     </p>
