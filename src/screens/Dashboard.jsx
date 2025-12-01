@@ -40,13 +40,14 @@ export default function Dashboard() {
 
   if (urlChatId) sessionStorage.setItem("preview_chatId", urlChatId);
 
-  const devParams = urlChatId
-    ? { chatId: urlChatId }
-    : storedPreviewId
-    ? { chatId: storedPreviewId }
-    : (!isTelegram && import.meta.env.VITE_DEV_CHAT_ID
-        ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
-        : undefined);
+  const devParams =
+    urlChatId
+      ? { chatId: urlChatId }
+      : storedPreviewId
+      ? { chatId: storedPreviewId }
+      : !isTelegram && import.meta.env.VITE_DEV_CHAT_ID
+      ? { chatId: import.meta.env.VITE_DEV_CHAT_ID }
+      : undefined;
 
   /** -----------------------------
    * LOAD USER PORTFOLIO
@@ -75,12 +76,13 @@ export default function Dashboard() {
     }
 
     loadPortfolio();
-    return () => (active = false);
+    return () => {
+      active = false;
+    };
   }, [isTelegram]);
 
   /** -----------------------------
    * LOAD REAL PORTFOLIO HISTORY
-   * FROM NEW ENDPOINT
    * ----------------------------- */
   useEffect(() => {
     async function loadPortfolioHistory() {
@@ -100,7 +102,9 @@ export default function Dashboard() {
           value: Number(p.balance),
         }));
 
-        setPortfolioHistory(series.length ? series : [{ label: "No Data", value: 0 }]);
+        setPortfolioHistory(
+          series.length ? series : [{ label: "No Data", value: 0 }]
+        );
       } catch (err) {
         console.log("Portfolio history error:", err.message);
       }
@@ -110,9 +114,40 @@ export default function Dashboard() {
   }, [timeframe]);
 
   /** -----------------------------
+   * CUSTOM TOOLTIP FOR DAILY PNL (FIXED)
+   * ----------------------------- */
+  function CustomPnlTooltip({ active, payload }) {
+    if (!active || !payload?.length) return null;
+
+    const data = payload[0].payload;
+    const sign = data.usdt >= 0 ? "+" : "";
+
+    return (
+      <div
+        style={{
+          background: "#020617",
+          border: "1px solid rgba(148,163,184,0.5)",
+          borderRadius: 12,
+          padding: "8px 10px",
+          fontSize: 12,
+          color: "#fff",
+        }}
+      >
+        <div style={{ marginBottom: 4 }}>{data.day}</div>
+        <div>
+          {sign}
+          {data.usdt.toFixed(2)} USDT
+        </div>
+      </div>
+    );
+  }
+
+  /** -----------------------------
    * LOAD RECENT TRADES + DAILY PNL
    * ----------------------------- */
   useEffect(() => {
+    if (!portfolio) return;
+
     async function loadTrades() {
       try {
         const res = await api.get("/api/stats", {
@@ -133,7 +168,7 @@ export default function Dashboard() {
 
         setRecentTrades(recent);
 
-        // DAILY PNL (last 7 days)
+        // DAILY PNL
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -143,6 +178,7 @@ export default function Dashboard() {
         for (let i = 6; i >= 0; i--) {
           const d = new Date(today);
           d.setDate(today.getDate() - i);
+
           const key = d.toISOString().slice(0, 10);
           const label = d.toLocaleDateString(undefined, { weekday: "short" });
 
@@ -161,11 +197,19 @@ export default function Dashboard() {
           dayMap.set(key, dayMap.get(key) + impact);
         });
 
+        const balanceUsd = portfolio.balance ?? 0;
+
         setDailyPnlSeries(
-          last7.map((d) => ({
-            day: d.label,
-            value: Number((dayMap.get(d.key) || 0).toFixed(2)),
-          }))
+          last7.map((d) => {
+            const pct = Number((dayMap.get(d.key) || 0).toFixed(2));
+            const usdt = Number(((balanceUsd * pct) / 100).toFixed(2));
+
+            return {
+              day: d.label,
+              value: pct,
+              usdt,
+            };
+          })
         );
       } catch (err) {
         console.log("Trades error:", err.message);
@@ -173,10 +217,10 @@ export default function Dashboard() {
     }
 
     loadTrades();
-  }, []);
+  }, [portfolio]);
 
   /** -----------------------------
-   * NAVIGATION WITH PERSISTENT chatId
+   * NAVIGATION HELPERS
    * ----------------------------- */
   const chatId = urlChatId || storedPreviewId;
 
@@ -213,7 +257,8 @@ export default function Dashboard() {
 
     try {
       const res = await api.post("/api/user/trading/toggle", { active: next });
-      if (!res.data.ok) throw new Error(res.data.error);
+      const data = res.data ?? res;
+      if (!data.ok) throw new Error(data.error);
     } catch (err) {
       setAutoTradingOn((prev) => !prev);
       setError(err.message);
@@ -236,7 +281,9 @@ export default function Dashboard() {
   if (!portfolio) {
     return (
       <div className="screen">
-        <div className="phone-shell">{error && <ErrorToast message={error} />}</div>
+        <div className="phone-shell">
+          {error && <ErrorToast message={error} />}
+        </div>
       </div>
     );
   }
@@ -273,13 +320,18 @@ export default function Dashboard() {
               <p className="balance-amount">${balance.toFixed(2)}</p>
 
               <div className="balance-sub-row">
+                {/* Today */}
                 <div className="balance-sub-item">
                   <div className="icon-circle red">
                     <span>↓</span>
                   </div>
                   <div className="balance-sub-text">
                     <span className="label">Today</span>
-                    <span className="value red">
+                    <span
+                      className={`value ${
+                        todayAmount < 0 ? "red" : "green"
+                      }`}
+                    >
                       {todayAmount < 0 ? "-" : "+"}
                       {Math.abs(todayAmount).toFixed(2)} (
                       {todayPercent < 0 ? "-" : "+"}
@@ -288,6 +340,7 @@ export default function Dashboard() {
                   </div>
                 </div>
 
+                {/* All Time */}
                 <div className="balance-sub-item">
                   <div className="icon-circle green">
                     <span>↑</span>
@@ -325,7 +378,7 @@ export default function Dashboard() {
           </button>
         </section>
 
-        {/* REAL PORTFOLIO GROWTH CHART */}
+        {/* PORTFOLIO GROWTH */}
         <section className="card-glass portfolio-card">
           <div className="section-header">
             <span className="section-title">Portfolio Growth</span>
@@ -418,7 +471,7 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* DAILY PNL */}
+        {/* DAILY PNL WITH FIXED TOOLTIP */}
         <section className="card-soft pnl-card">
           <div className="section-header">
             <span className="section-title">Daily PnL (Last 7 days)</span>
@@ -432,15 +485,12 @@ export default function Dashboard() {
                   axisLine={false}
                   tickLine={false}
                 />
+
                 <YAxis hide />
-                <BarTooltip
-                  contentStyle={{
-                    background: "#020617",
-                    border: "1px solid rgba(148,163,184,0.5)",
-                    borderRadius: 12,
-                    fontSize: 11,
-                  }}
-                />
+
+                {/* FIXED TOOLTIP */}
+                <BarTooltip content={<CustomPnlTooltip />} />
+
                 <Bar
                   dataKey="value"
                   radius={[6, 6, 0, 0]}
